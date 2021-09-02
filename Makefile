@@ -195,6 +195,16 @@ with-profiler: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.toml
 	cargo rustc --release --features profiler $(CARGO_FLAGS)
 	mv build/wasm32-unknown-unknown/release/v86.wasm build/v86.wasm || true
 
+debug-with-snooper: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.toml
+	mkdir -p build/
+	cargo rustc --features snooper $(CARGO_FLAGS)
+	mv build/wasm32-unknown-unknown/debug/v86.wasm build/v86-debug.wasm || true
+
+with-snooper: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.toml
+	mkdir -p build/
+	cargo rustc --release --features snooper $(CARGO_FLAGS)
+	mv build/wasm32-unknown-unknown/release/v86.wasm build/v86.wasm || true
+
 build/softfloat.o: lib/softfloat/softfloat.c
 	mkdir -p build
 	clang -c -Wall \

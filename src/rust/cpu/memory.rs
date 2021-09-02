@@ -8,6 +8,19 @@ extern "C" {
     pub fn mmap_write32(addr: u32, value: i32);
     pub fn mmap_write64(addr: u32, v0: i32, v1: i32);
     pub fn mmap_write128(addr: u32, v0: i32, v1: i32, v2: i32, v3: i32);
+
+    pub fn snoop_read_bytes(addr: u32, count: u32);
+    pub fn snoop_write_bytes(addr: u32, count: u32);
+}
+
+#[no_mangle]
+pub unsafe fn snoop_read_bytes_jit(addr: u32, count: u32) {
+    snoop_read_bytes(addr, count);
+}
+
+#[no_mangle]
+pub unsafe fn snoop_write_bytes_jit(addr: u32, count: u32) {
+    snoop_write_bytes(addr, count);
 }
 
 use cpu::cpu::reg128;
@@ -50,7 +63,14 @@ pub fn read8(addr: u32) -> i32 {
         return read8_no_mmap_check(addr);
     };
 }
-pub fn read8_no_mmap_check(addr: u32) -> i32 { unsafe { *mem8.offset(addr as isize) as i32 } }
+pub fn read8_no_mmap_check(addr: u32) -> i32 {
+    unsafe {
+        if cfg!(feature = "snooper") {
+            snoop_read_bytes(addr, 1)
+        }
+        *mem8.offset(addr as isize) as i32
+    }
+}
 
 #[no_mangle]
 pub fn read16(addr: u32) -> i32 {
@@ -62,7 +82,12 @@ pub fn read16(addr: u32) -> i32 {
     };
 }
 pub fn read16_no_mmap_check(addr: u32) -> i32 {
-    unsafe { *(mem8.offset(addr as isize) as *mut u16) as i32 }
+    unsafe {
+        if cfg!(feature = "snooper") {
+            snoop_read_bytes(addr, 2);
+        }
+        *(mem8.offset(addr as isize) as *mut u16) as i32
+    }
 }
 
 #[no_mangle]
@@ -75,7 +100,12 @@ pub fn read32s(addr: u32) -> i32 {
     };
 }
 pub fn read32_no_mmap_check(addr: u32) -> i32 {
-    unsafe { *(mem8.offset(addr as isize) as *mut i32) }
+    unsafe {
+        if cfg!(feature = "snooper") {
+            snoop_read_bytes(addr, 4);
+        }
+        *(mem8.offset(addr as isize) as *mut i32)
+    }
 }
 
 pub unsafe fn read64s(addr: u32) -> i64 {
@@ -83,6 +113,9 @@ pub unsafe fn read64s(addr: u32) -> i64 {
         return mmap_read32(addr) as i64 | (mmap_read32(addr.wrapping_add(4 as u32)) as i64) << 32;
     }
     else {
+        if cfg!(feature = "snooper") {
+            snoop_read_bytes(addr, 8);
+        }
         return *(mem8.offset(addr as isize) as *mut i64);
     };
 }
@@ -93,6 +126,9 @@ pub unsafe fn read_aligned32(addr: u32) -> i32 {
         return mmap_read32(addr << 2);
     }
     else {
+        if cfg!(feature = "snooper") {
+            snoop_read_bytes(addr << 2, 4)
+        }
         return *(mem8 as *mut i32).offset(addr as isize);
     };
 }
@@ -108,6 +144,9 @@ pub unsafe fn read128(addr: u32) -> reg128 {
         value.i32_0[3] = mmap_read32(addr.wrapping_add(12 as u32))
     }
     else {
+        if cfg!(feature = "snooper") {
+            snoop_read_bytes(addr, 16);
+        }
         value.i64_0[0] = *(mem8.offset(addr as isize) as *mut i64);
         value.i64_0[1] = *(mem8.offset(addr as isize).offset(8) as *mut i64)
     }
@@ -125,6 +164,9 @@ pub unsafe fn write8(addr: u32, value: i32) {
 }
 
 pub unsafe fn write8_no_mmap_or_dirty_check(addr: u32, value: i32) {
+    if cfg!(feature = "snooper") {
+        snoop_write_bytes(addr, 1);
+    }
     *mem8.offset(addr as isize) = value as u8
 }
 
@@ -139,6 +181,9 @@ pub unsafe fn write16(addr: u32, value: i32) {
     };
 }
 pub unsafe fn write16_no_mmap_or_dirty_check(addr: u32, value: i32) {
+    if cfg!(feature = "snooper") {
+        snoop_write_bytes(addr, 2);
+    }
     *(mem8.offset(addr as isize) as *mut u16) = value as u16
 }
 
@@ -154,10 +199,16 @@ pub unsafe fn write32(addr: u32, value: i32) {
 }
 
 pub unsafe fn write32_no_mmap_or_dirty_check(addr: u32, value: i32) {
+    if cfg!(feature = "snooper") {
+        snoop_write_bytes(addr, 4);
+    }
     *(mem8.offset(addr as isize) as *mut i32) = value
 }
 
 pub unsafe fn write_aligned32_no_mmap_or_dirty_check(addr: u32, value: i32) {
+    if cfg!(feature = "snooper") {
+        snoop_write_bytes(addr << 2, 4);
+    }
     *(mem8 as *mut i32).offset(addr as isize) = value
 }
 
@@ -174,19 +225,32 @@ pub unsafe fn write_aligned32(addr: u32, value: i32) {
 }
 
 pub unsafe fn write64_no_mmap_or_dirty_check(addr: u32, value: u64) {
+    if cfg!(feature = "snooper") {
+        snoop_write_bytes(addr, 8);
+    }
     *(mem8.offset(addr as isize) as *mut u64) = value
 }
 
 pub unsafe fn write128_no_mmap_or_dirty_check(addr: u32, value: reg128) {
+    if cfg!(feature = "snooper") {
+        snoop_write_bytes(addr, 16);
+    }
     *(mem8.offset(addr as isize) as *mut reg128) = value
 }
 
 pub unsafe fn memset_no_mmap_or_dirty_check(addr: u32, value: u8, count: u32) {
+    if cfg!(feature = "snooper") {
+        snoop_write_bytes(addr, count);
+    }
     ptr::write_bytes(mem8.offset(addr as isize), value, count as usize);
 }
 
 pub unsafe fn memcpy_no_mmap_or_dirty_check(src_addr: u32, dst_addr: u32, count: u32) {
     dbg_assert!(u32::max(src_addr, dst_addr) - u32::min(src_addr, dst_addr) >= count);
+    if cfg!(feature = "snooper") {
+        snoop_read_bytes(src_addr, count);
+        snoop_write_bytes(dst_addr, count);
+    }
     ptr::copy_nonoverlapping(
         mem8.offset(src_addr as isize),
         mem8.offset(dst_addr as isize),

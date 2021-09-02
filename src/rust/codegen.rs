@@ -562,6 +562,30 @@ pub fn gen_safe_write128(
     )
 }
 
+enum SnoopType {
+    READ,
+    WRITE,
+}
+
+fn gen_snoop_bytes(
+    ctx: &mut JitContext,
+    bits: BitSize,
+    ty: SnoopType
+) {
+    if cfg!(feature = "snooper") {
+        let local = ctx.builder.tee_new_local();
+        ctx.builder.get_local(&local);
+        ctx.builder.const_i32(unsafe { memory::mem8 } as i32);
+        ctx.builder.sub_i32();
+        ctx.builder.const_i32(bits.bytes() as i32);
+        ctx.builder.call_fn2(match ty {
+            SnoopType::READ => "snoop_read_bytes_jit",
+            SnoopType::WRITE => "snoop_write_bytes_jit",
+        });
+        ctx.builder.free_local(local);
+    }
+}
+
 fn gen_safe_read(
     ctx: &mut JitContext,
     bits: BitSize,
@@ -667,6 +691,8 @@ fn gen_safe_read(
 
     // where_to_write is only used by dqword
     dbg_assert!((where_to_write != None) == (bits == BitSize::DQWORD));
+
+    gen_snoop_bytes(ctx, bits, SnoopType::READ);
 
     match bits {
         BitSize::BYTE => {
@@ -886,6 +912,8 @@ fn gen_safe_write(
     ctx.builder.get_local(&address_local);
     ctx.builder.xor_i32();
 
+    gen_snoop_bytes(ctx, bits, SnoopType::WRITE);
+
     match value_local {
         GenSafeWriteValue::I32(local) => ctx.builder.get_local(local),
         GenSafeWriteValue::I64(local) => ctx.builder.get_local_i64(local),
@@ -1026,6 +1054,8 @@ pub fn gen_safe_read_write(
     ctx.builder.free_local(entry_local);
     let phys_addr_local = ctx.builder.tee_new_local();
 
+    gen_snoop_bytes(ctx, bits, SnoopType::READ);
+
     match bits {
         BitSize::BYTE => {
             ctx.builder.load_u8(0);
@@ -1115,11 +1145,14 @@ pub fn gen_safe_read_write(
     ctx.builder.block_end();
 
     ctx.builder.get_local(&phys_addr_local);
+
+    gen_snoop_bytes(ctx, bits, SnoopType::WRITE);
+
     match &value_local {
         GenSafeReadWriteValue::I32(l) => ctx.builder.get_local(l),
         GenSafeReadWriteValue::I64(l) => ctx.builder.get_local_i64(l),
     }
-
+    
     match bits {
         BitSize::BYTE => {
             ctx.builder.store_u8(0);
