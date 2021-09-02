@@ -19,7 +19,6 @@ extern "C" {
 use cpu::fpu::fpu_set_tag_word;
 use cpu::global_pointers::*;
 use cpu::memory;
-use cpu::memory::mem8;
 use cpu::memory::{
     in_mapped_range, read8, read16, read32s, read64s, read128, read_aligned32, write8,
     write_aligned32,
@@ -2295,7 +2294,7 @@ pub unsafe fn read_imm8() -> OrPageFault<i32> {
         *last_virt_eip = eip & !0xFFF
     }
     dbg_assert!(!in_mapped_range((*eip_phys ^ eip) as u32));
-    let data8 = *mem8.offset((*eip_phys ^ eip) as isize) as i32;
+    let data8 = memory::read8_no_mmap_check((*eip_phys ^ eip) as u32);
     *instruction_pointer = eip + 1;
     return Ok(data8);
 }
@@ -2858,7 +2857,7 @@ unsafe fn jit_run_interpreted(phys_addr: u32) {
     }
 
     jit_block_boundary = false;
-    let opcode = *mem8.offset(phys_addr as isize) as i32;
+    let opcode = memory::read8_no_mmap_check(phys_addr);
     *instruction_pointer += 1;
     *instruction_counter += 1;
     dbg_assert!(*prefixes == 0);
